@@ -1,7 +1,7 @@
 "use client";
 
 import { type MapLayerMouseEvent, Popup } from "@vis.gl/react-maplibre";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type {
   DripFeatureCollection,
   DripProperties,
@@ -10,6 +10,7 @@ import type {
   MsiFeatureCollection,
   MsiGantryProperties,
 } from "@/app/api/msi/route";
+import { useFeedQuery } from "@/app/hooks/useFeedQuery";
 import BaseMap from "../BaseMap";
 import DripLayer from "./DripLayer";
 import MsiLayer, { GantryRow, MSI_COLORS } from "./MsiLayer";
@@ -33,28 +34,6 @@ type PopupInfo =
       kind: "msi";
       props: MsiGantryProperties;
     };
-
-function useFeed<T>(url: string) {
-  const [data, setData] = useState<T | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    fetch(url)
-      .then((res) => {
-        if (!res.ok) throw new Error(`${url} responded ${res.status}`);
-        return res.json();
-      })
-      .then((json: T) => {
-        if (!cancelled) setData(json);
-      })
-      .catch((err) => {
-        if (!cancelled) console.error(`Failed to load ${url}:`, err);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [url]);
-  return data;
-}
 
 function DripPopupBody({ props }: { props: DripProperties }) {
   return (
@@ -113,8 +92,8 @@ function MsiPopupBody({ props }: { props: MsiGantryProperties }) {
 }
 
 export default function SignsMap() {
-  const drips = useFeed<DripFeatureCollection>("/api/drips");
-  const msi = useFeed<MsiFeatureCollection>("/api/msi");
+  const { data: drips } = useFeedQuery<DripFeatureCollection>("/api/drips");
+  const { data: msi } = useFeedQuery<MsiFeatureCollection>("/api/msi");
   const [showDrips, setShowDrips] = useState(true);
   const [showMsi, setShowMsi] = useState(true);
   const [popup, setPopup] = useState<PopupInfo | null>(null);
@@ -174,8 +153,12 @@ export default function SignsMap() {
   return (
     <>
       <BaseMap interactiveLayerIds={INTERACTIVE_LAYERS} onClick={onClick}>
-        <DripLayer data={drips} visible={showDrips} />
-        <MsiLayer data={msi} visible={showMsi} onSelect={onSelectGantry} />
+        <DripLayer data={drips ?? null} visible={showDrips} />
+        <MsiLayer
+          data={msi ?? null}
+          visible={showMsi}
+          onSelect={onSelectGantry}
+        />
         {popup && (
           <Popup
             longitude={popup.longitude}

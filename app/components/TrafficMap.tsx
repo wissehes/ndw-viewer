@@ -8,11 +8,12 @@ import {
   Source,
 } from "@vis.gl/react-maplibre";
 import type { ExpressionSpecification } from "maplibre-gl";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type {
   FeatureCollection,
   SituationProperties,
 } from "@/app/api/actueel-beeld/route";
+import { useFeedQuery } from "@/app/hooks/useFeedQuery";
 import BaseMap from "./BaseMap";
 
 const LAYER_ID = "situations-layer";
@@ -99,26 +100,8 @@ function SituationPopup({ props }: { props: SituationProperties }) {
 }
 
 export default function TrafficMap() {
-  const [data, setData] = useState<FeatureCollection | null>(null);
+  const { data } = useFeedQuery<FeatureCollection>("/api/actueel-beeld");
   const [popupInfo, setPopupInfo] = useState<PopupInfo | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/actueel-beeld")
-      .then((res) => {
-        if (!res.ok) throw new Error(`API responded ${res.status}`);
-        return res.json();
-      })
-      .then((json: FeatureCollection) => {
-        if (!cancelled) setData(json);
-      })
-      .catch((err) => {
-        if (!cancelled) console.error("Failed to load NDW situations:", err);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const onClick = useCallback((event: MapLayerMouseEvent) => {
     const feature = event.features?.[0];

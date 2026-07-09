@@ -1,11 +1,9 @@
 "use client";
 
-import "maplibre-gl/dist/maplibre-gl.css";
-import MapGL, {
+import {
   Layer,
   type LayerProps,
   type MapLayerMouseEvent,
-  NavigationControl,
   Popup,
   Source,
 } from "@vis.gl/react-maplibre";
@@ -15,8 +13,8 @@ import type {
   FeatureCollection,
   SituationProperties,
 } from "@/app/api/actueel-beeld/route";
+import BaseMap from "./BaseMap";
 
-const STYLE_URL = process.env.NEXT_PUBLIC_MAPTILER_STYLE_URL;
 const LAYER_ID = "situations-layer";
 
 // Marker color per DATEX II situation record type.
@@ -103,8 +101,6 @@ function SituationPopup({ props }: { props: SituationProperties }) {
 export default function TrafficMap() {
   const [data, setData] = useState<FeatureCollection | null>(null);
   const [popupInfo, setPopupInfo] = useState<PopupInfo | null>(null);
-  const [cursor, setCursor] = useState("auto");
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,10 +113,7 @@ export default function TrafficMap() {
         if (!cancelled) setData(json);
       })
       .catch((err) => {
-        if (!cancelled) {
-          console.error("Failed to load NDW situations:", err);
-          setError(err.message ?? String(err));
-        }
+        if (!cancelled) console.error("Failed to load NDW situations:", err);
       });
     return () => {
       cancelled = true;
@@ -144,55 +137,26 @@ export default function TrafficMap() {
     });
   }, []);
 
-  if (!STYLE_URL) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-zinc-100 p-8 text-center dark:bg-zinc-900">
-        <p className="max-w-md text-sm text-zinc-600 dark:text-zinc-400">
-          Set <code>NEXT_PUBLIC_MAPTILER_STYLE_URL</code> in a{" "}
-          <code>.env.local</code> file to your MapTiler style URL, then restart
-          the dev server.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <>
-      <MapGL
-        initialViewState={{ longitude: 5.29, latitude: 52.13, zoom: 7 }}
-        mapStyle={STYLE_URL}
-        interactiveLayerIds={[LAYER_ID]}
-        cursor={cursor}
-        onClick={onClick}
-        onMouseEnter={() => setCursor("pointer")}
-        onMouseLeave={() => setCursor("auto")}
-        onError={(e) => setError(e.error?.message ?? "Unknown map error")}
-      >
-        <NavigationControl position="top-right" />
-        {data && (
-          <Source id="situations" type="geojson" data={data}>
-            <Layer {...layerStyle} />
-          </Source>
-        )}
-        {popupInfo && (
-          <Popup
-            longitude={popupInfo.longitude}
-            latitude={popupInfo.latitude}
-            anchor="bottom"
-            closeButton
-            closeOnClick={false}
-            maxWidth="260px"
-            onClose={() => setPopupInfo(null)}
-          >
-            <SituationPopup props={popupInfo.props} />
-          </Popup>
-        )}
-      </MapGL>
-      {error && (
-        <div className="absolute left-1/2 top-4 z-10 max-w-md -translate-x-1/2 rounded-md bg-red-600 px-4 py-2 text-center text-sm text-white shadow-lg">
-          Map error: {error}
-        </div>
+    <BaseMap interactiveLayerIds={[LAYER_ID]} onClick={onClick}>
+      {data && (
+        <Source id="situations" type="geojson" data={data}>
+          <Layer {...layerStyle} />
+        </Source>
       )}
-    </>
+      {popupInfo && (
+        <Popup
+          longitude={popupInfo.longitude}
+          latitude={popupInfo.latitude}
+          anchor="bottom"
+          closeButton
+          closeOnClick={false}
+          maxWidth="260px"
+          onClose={() => setPopupInfo(null)}
+        >
+          <SituationPopup props={popupInfo.props} />
+        </Popup>
+      )}
+    </BaseMap>
   );
 }

@@ -10,6 +10,7 @@
     "format": "biome format --write"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.2",
     "@vis.gl/react-maplibre": "^8.1.1",
     "fast-xml-parser": "^5.9.3",
     "maplibre-gl": "^5.24.0",

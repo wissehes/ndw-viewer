@@ -1,15 +1,13 @@
-import { gunzipSync } from "node:zlib";
-import { XMLParser } from "fast-xml-parser";
+import { createCachedFeed } from "@/app/lib/feedCache";
+import { asArray, fetchGzipXml, findFirst } from "@/app/lib/feeds";
 
 // NDW "actueel beeld" (current situations) feed: gzipped DATEX II v3 XML,
 // ~4 MB uncompressed, refreshed roughly every minute. We fetch it server-side,
-// convert it to GeoJSON, and cache the result in-process so the heavy
-// fetch+gunzip+parse runs at most once per TTL regardless of page loads.
+// convert it to GeoJSON, and cache the result (see createCachedFeed).
 
 const FEED_URL = "https://opendata.ndw.nu/actueel_beeld.xml.gz";
-const TTL_MS = 60_000; // NDW updates ~every minute
 
-// Secondary HTTP-layer cache; the module cache below is the primary store.
+// Secondary HTTP-layer cache; the module cache in createCachedFeed is primary.
 export const revalidate = 60;
 
 export interface SituationProperties {
@@ -31,74 +29,6 @@ export interface SituationFeature {
 export interface FeatureCollection {
   type: "FeatureCollection";
   features: SituationFeature[];
-}
-
-// --- In-memory cache ---------------------------------------------------------
-// NOTE: module state is per-process. It resets on dev hot-reload and is not
-// shared across serverless instances. Fine here; a shared store (Redis/KV)
-// would be the next step for a scaled deployment.
-type CacheEntry = { data: FeatureCollection; fetchedAt: number };
-let cache: CacheEntry | null = null;
-let inflight: Promise<FeatureCollection> | null = null;
-
-async function getSituations(): Promise<FeatureCollection> {
-  if (cache && Date.now() - cache.fetchedAt < TTL_MS) {
-    return cache.data;
-  }
-  // Dedupe concurrent refreshes: only one fetch/parse runs at a time.
-  if (!inflight) {
-    inflight = refresh().finally(() => {
-      inflight = null;
-    });
-  }
-  try {
-    return await inflight;
-  } catch (err) {
-    // Serve stale data through a transient upstream failure if we have it.
-    if (cache) {
-      console.error("actueel-beeld refresh failed, serving stale cache:", err);
-      return cache.data;
-    }
-    throw err;
-  }
-}
-
-async function refresh(): Promise<FeatureCollection> {
-  const res = await fetch(FEED_URL);
-  if (!res.ok) {
-    throw new Error(`NDW feed responded ${res.status}`);
-  }
-  const compressed = Buffer.from(await res.arrayBuffer());
-  const xml = gunzipSync(compressed).toString("utf8");
-  const data = toGeoJSON(xml);
-  cache = { data, fetchedAt: Date.now() };
-  return data;
-}
-
-// --- DATEX II v3 -> GeoJSON --------------------------------------------------
-const parser = new XMLParser({
-  ignoreAttributes: false,
-  removeNSPrefix: true,
-  attributeNamePrefix: "@_",
-});
-
-function asArray<T>(value: T | T[] | undefined): T[] {
-  if (value === undefined || value === null) return [];
-  return Array.isArray(value) ? value : [value];
-}
-
-// Recursively find the first value for `key` anywhere in a nested object.
-// DATEX II nests coordinates differently per location-reference type, so a
-// structural search is more robust than hard-coding each path.
-// biome-ignore lint/suspicious/noExplicitAny: parsed XML is dynamically shaped
-function findFirst(node: any, key: string): any {
-  if (!node || typeof node !== "object") return null;
-  if (node[key] != null) return node[key];
-  for (const k of Object.keys(node)) {
-    const found = findFirst(node[k], key);
-    if (found != null) return found;
-  }
-  return null;
 }
 
 // Returns [lon, lat] for a situation, or null if it has no usable coordinates.
@@ -126,8 +56,8 @@ function extractCoordinates(situation: any): [number, number] | null {
   return null;
 }
 
-function toGeoJSON(xml: string): FeatureCollection {
-  const parsed = parser.parse(xml);
+// biome-ignore lint/suspicious/noExplicitAny: parsed XML is dynamically shaped
+function toGeoJSON(parsed: any): FeatureCollection {
   const situations = asArray(parsed?.messageContainer?.payload?.situation);
   const features: SituationFeature[] = [];
 
@@ -164,10 +94,14 @@ function toGeoJSON(xml: string): FeatureCollection {
   return { type: "FeatureCollection", features };
 }
 
+const feed = createCachedFeed<FeatureCollection>(
+  async () => toGeoJSON(await fetchGzipXml(FEED_URL)),
+  60_000,
+);
+
 export async function GET() {
   try {
-    const data = await getSituations();
-    return Response.json(data);
+    return Response.json(await feed.get());
   } catch (err) {
     console.error("actueel-beeld failed:", err);
     return Response.json(

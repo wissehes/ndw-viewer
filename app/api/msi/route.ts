@@ -37,6 +37,7 @@ export interface MsiLane {
   display: string; // blank | speedlimit | lane_closed | lane_open | ...
   speed: number | null;
   flashing: boolean;
+  merge: "left" | "right" | null; // for lane_closed_ahead: which way to merge
 }
 
 export interface MsiGantryProperties {
@@ -73,17 +74,22 @@ function parseDisplay(display: any): {
   display: string;
   speed: number | null;
   flashing: boolean;
+  merge: "left" | "right" | null;
 } {
   const key = Object.keys(display)[0] ?? "blank";
   const value = display[key];
   let speed: number | null = null;
   let flashing = false;
+  let merge: "left" | "right" | null = null;
   if (value && typeof value === "object") {
     flashing = String(value["@_flashing"]) === "true";
     const text = Number(value["#text"]);
     if (Number.isFinite(text)) speed = text;
+    // lane_closed_ahead nests merge_left / merge_right (the way to move over).
+    if ("merge_left" in value) merge = "left";
+    else if ("merge_right" in value) merge = "right";
   }
-  return { display: key, speed, flashing };
+  return { display: key, speed, flashing, merge };
 }
 
 interface Accumulator {
@@ -131,9 +137,9 @@ function toGeoJSON(parsed: any): MsiFeatureCollection {
     const carriageway = String(loc?.lanelocation?.carriageway ?? "");
     const km = Number(loc?.lanelocation?.km) || 0;
     const lane = Number(loc?.lanelocation?.lane) || 1;
-    const { display, speed, flashing } = disp
+    const { display, speed, flashing, merge } = disp
       ? parseDisplay(disp.display)
-      : { display: "blank", speed: null, flashing: false };
+      : { display: "blank", speed: null, flashing: false, merge: null };
 
     const key = `${road}|${carriageway}|${km}`;
     let gantry = gantries.get(key);
@@ -153,7 +159,7 @@ function toGeoJSON(parsed: any): MsiFeatureCollection {
     gantry.lonSum += lon;
     gantry.latSum += lat;
     gantry.count += 1;
-    gantry.lanes.push({ lane, display, speed, flashing });
+    gantry.lanes.push({ lane, display, speed, flashing, merge });
     const update = disp?.ts_state ?? disp?.ts_event;
     if (update && (!gantry.updateTime || update > gantry.updateTime)) {
       gantry.updateTime = update;

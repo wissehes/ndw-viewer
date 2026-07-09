@@ -15,6 +15,7 @@ import type {
   MsiGantryProperties,
   MsiLane,
 } from "@/app/api/msi/route";
+import MergeArrow from "./MergeArrow";
 
 // Color per active display state (dot color when zoomed out + legend).
 export const MSI_COLORS: Record<string, string> = {
@@ -71,7 +72,7 @@ function LaneCell({ lane }: { lane: MsiLane }) {
       content = <span className="text-sm font-bold text-green-500">↓</span>;
       break;
     case "lane_closed_ahead":
-      content = <span className="text-sm font-bold text-amber-400">↘</span>;
+      content = <MergeArrow merge={lane.merge} />;
       break;
     case "restriction_end":
       content = <span className="text-sm font-bold text-zinc-300">╱</span>;

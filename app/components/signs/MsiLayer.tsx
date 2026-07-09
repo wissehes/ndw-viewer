@@ -7,7 +7,7 @@ import {
   Source,
   useMap,
 } from "@vis.gl/react-maplibre";
-import type { ExpressionSpecification } from "maplibre-gl";
+import type { ExpressionSpecification, LngLatBounds } from "maplibre-gl";
 import { useEffect, useState } from "react";
 import type {
   MsiFeature,
@@ -103,12 +103,18 @@ function GantryMarkers({
   onSelect: (props: MsiGantryProperties, coords: [number, number]) => void;
 }) {
   const { current: map } = useMap();
-  const [tick, setTick] = useState(0);
+  // Track zoom + bounds as real state so the render (and the React Compiler)
+  // recompute the visible set whenever the map moves.
+  const [view, setView] = useState<{
+    zoom: number;
+    bounds: LngLatBounds | null;
+  }>({ zoom: 0, bounds: null });
 
   useEffect(() => {
     if (!map) return;
     const instance = map.getMap();
-    const update = () => setTick((t) => t + 1);
+    const update = () =>
+      setView({ zoom: instance.getZoom(), bounds: instance.getBounds() });
     instance.on("moveend", update);
     instance.on("zoomend", update);
     update();
@@ -118,17 +124,9 @@ function GantryMarkers({
     };
   }, [map]);
 
-  if (!map) {
-    console.warn("[msi] no map from useMap");
-    return null;
-  }
-  const instance = map.getMap();
-  // `tick` re-runs this on every map move so the visible set stays current.
-  void tick;
-  const zoom = instance.getZoom();
-  if (zoom < ROW_MIN_ZOOM) return null;
+  if (view.zoom < ROW_MIN_ZOOM || !view.bounds) return null;
 
-  const bounds = instance.getBounds();
+  const bounds = view.bounds;
   const visible: MsiFeature[] = [];
   for (const feature of data.features) {
     if (!feature.properties.active) continue;
@@ -137,9 +135,6 @@ function GantryMarkers({
     visible.push(feature);
     if (visible.length >= MAX_ROWS) break;
   }
-  console.warn(
-    `[msi] zoom=${zoom.toFixed(1)} features=${data.features.length} visible=${visible.length}`,
-  );
 
   return (
     <>

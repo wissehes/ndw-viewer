@@ -44,6 +44,7 @@ export interface MsiGantryProperties {
   road: string;
   carriageway: string;
   km: number;
+  bearing: number; // travel direction, degrees clockwise from north (uniform per gantry)
   active: boolean; // any lane not blank
   primaryDisplay: string; // for dot color when zoomed out
   lanes: MsiLane[]; // sorted by lane number
@@ -92,6 +93,7 @@ interface Accumulator {
   road: string;
   carriageway: string;
   km: number;
+  bearing: number;
   lanes: MsiLane[];
   updateTime?: string;
 }
@@ -123,7 +125,7 @@ function toGeoJSON(parsed: any): MsiFeatureCollection {
     const uuid = loc?.sign_id?.uuid ?? disp?.sign_id?.uuid;
     const coord = uuid ? locations[uuid] : undefined;
     if (!coord) continue; // no shapefile geocode for this sign
-    const [lon, lat] = coord;
+    const [lon, lat, bearing] = coord;
 
     const road = String(loc?.lanelocation?.road ?? "");
     const carriageway = String(loc?.lanelocation?.carriageway ?? "");
@@ -143,6 +145,7 @@ function toGeoJSON(parsed: any): MsiFeatureCollection {
         road,
         carriageway,
         km,
+        bearing, // uniform across a gantry's lanes
         lanes: [],
       };
       gantries.set(key, gantry);
@@ -178,6 +181,7 @@ function toGeoJSON(parsed: any): MsiFeatureCollection {
         road: gantry.road,
         carriageway: gantry.carriageway,
         km: gantry.km,
+        bearing: gantry.bearing,
         active,
         primaryDisplay,
         lanes,

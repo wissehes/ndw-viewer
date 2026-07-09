@@ -29,6 +29,9 @@ const DEFAULT_COLOR = "#9ca3af";
 // Above this zoom, gantries render as fixed-pixel lane rows instead of dots.
 const ROW_MIN_ZOOM = 12;
 const MAX_ROWS = 600;
+// Pixels each row is pushed perpendicular (right) of its travel direction, so
+// the two carriageways of a road land on opposite sides instead of overlapping.
+const ROW_OFFSET = 30;
 
 const dotColor = [
   "match",
@@ -108,13 +111,18 @@ function GantryMarkers({
   const [view, setView] = useState<{
     zoom: number;
     bounds: LngLatBounds | null;
-  }>({ zoom: 0, bounds: null });
+    bearing: number;
+  }>({ zoom: 0, bounds: null, bearing: 0 });
 
   useEffect(() => {
     if (!map) return;
     const instance = map.getMap();
     const update = () =>
-      setView({ zoom: instance.getZoom(), bounds: instance.getBounds() });
+      setView({
+        zoom: instance.getZoom(),
+        bounds: instance.getBounds(),
+        bearing: instance.getBearing(),
+      });
     instance.on("moveend", update);
     instance.on("zoomend", update);
     update();
@@ -138,22 +146,45 @@ function GantryMarkers({
 
   return (
     <>
-      {visible.map((feature) => (
-        <Marker
-          key={feature.properties.id}
-          longitude={feature.geometry.coordinates[0]}
-          latitude={feature.geometry.coordinates[1]}
-          anchor="bottom"
-          onClick={(e) => {
-            e.originalEvent.stopPropagation();
-            onSelect(feature.properties, feature.geometry.coordinates);
-          }}
-        >
-          <div className="cursor-pointer">
-            <GantryRow lanes={feature.properties.lanes} />
-          </div>
-        </Marker>
-      ))}
+      {visible.map((feature) => {
+        const { bearing, road, carriageway } = feature.properties;
+        // Bearing relative to the current screen orientation (map can rotate).
+        const screen = bearing - view.bearing;
+        const rad = (screen * Math.PI) / 180;
+        // Right-of-travel unit vector in screen space (y points down).
+        const offset: [number, number] = [
+          Math.cos(rad) * ROW_OFFSET,
+          Math.sin(rad) * ROW_OFFSET,
+        ];
+        return (
+          <Marker
+            key={feature.properties.id}
+            longitude={feature.geometry.coordinates[0]}
+            latitude={feature.geometry.coordinates[1]}
+            anchor="center"
+            offset={offset}
+            onClick={(e) => {
+              e.originalEvent.stopPropagation();
+              onSelect(feature.properties, feature.geometry.coordinates);
+            }}
+          >
+            <div className="flex cursor-pointer flex-col items-center gap-0.5">
+              <div className="flex items-center gap-1 rounded bg-black/80 px-1 py-0.5 text-[9px] font-bold leading-none text-white ring-1 ring-black/40">
+                <span
+                  className="inline-block leading-none"
+                  style={{ transform: `rotate(${screen}deg)` }}
+                >
+                  ▲
+                </span>
+                <span>
+                  {road} {carriageway}
+                </span>
+              </div>
+              <GantryRow lanes={feature.properties.lanes} />
+            </div>
+          </Marker>
+        );
+      })}
     </>
   );
 }

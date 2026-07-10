@@ -9,7 +9,9 @@ import { type ReactNode, useState } from "react";
 import { useMapView } from "@/app/hooks/useMapView";
 import { roundCoord, roundZoom } from "@/app/lib/mapView";
 
-const STYLE_URL = process.env.NEXT_PUBLIC_MAPTILER_STYLE_URL;
+// Proxy route that serves the MapLibre style JSON, reading MAPTILER_STYLE_URL
+// server-side at runtime (see app/api/map/style/route.ts).
+const STYLE_URL = "/api/map/style";
 
 interface BaseMapProps {
   interactiveLayerIds?: string[];
@@ -36,18 +38,6 @@ export default function BaseMap({
     latitude: view.lat,
     zoom: view.zoom,
   }));
-
-  if (!STYLE_URL) {
-    return (
-      <div className="flex h-full w-full items-center justify-center bg-zinc-100 p-8 text-center dark:bg-zinc-900">
-        <p className="max-w-md text-sm text-zinc-600 dark:text-zinc-400">
-          Set <code>NEXT_PUBLIC_MAPTILER_STYLE_URL</code> in a{" "}
-          <code>.env.local</code> file to your MapTiler style URL, then restart
-          the dev server.
-        </p>
-      </div>
-    );
-  }
 
   return (
     <>

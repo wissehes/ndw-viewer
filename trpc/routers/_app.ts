@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { baseProcedure, createTRPCRouter } from "../init";
+import { feedsRouter } from "./feeds";
 
 export const appRouter = createTRPCRouter({
+  feeds: feedsRouter,
   hello: baseProcedure
     .input(
       z.object({

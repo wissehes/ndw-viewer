@@ -1,16 +1,11 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { type MapLayerMouseEvent, Popup } from "@vis.gl/react-maplibre";
 import { useCallback, useState } from "react";
-import type {
-  DripFeatureCollection,
-  DripProperties,
-} from "@/app/api/drips/route";
-import type {
-  MsiFeatureCollection,
-  MsiGantryProperties,
-} from "@/app/api/msi/route";
-import { useFeedQuery } from "@/app/hooks/useFeedQuery";
+import { useTRPC } from "@/trpc/client";
+import type { DripProperties } from "@/types/NDW/Drips";
+import type { MsiGantryProperties } from "@/types/NDW/Msi";
 import BaseMap from "../BaseMap";
 import DripLayer from "./DripLayer";
 import MsiLayer, { GantryRow, MSI_COLORS } from "./MsiLayer";
@@ -92,8 +87,9 @@ function MsiPopupBody({ props }: { props: MsiGantryProperties }) {
 }
 
 export default function SignsMap() {
-  const { data: drips } = useFeedQuery<DripFeatureCollection>("/api/drips");
-  const { data: msi } = useFeedQuery<MsiFeatureCollection>("/api/msi");
+  const trpc = useTRPC();
+  const { data: drips } = useQuery(trpc.feeds.drips.queryOptions());
+  const { data: msi } = useQuery(trpc.feeds.msi.queryOptions());
   const [showDrips, setShowDrips] = useState(true);
   const [showMsi, setShowMsi] = useState(true);
   const [popup, setPopup] = useState<PopupInfo | null>(null);

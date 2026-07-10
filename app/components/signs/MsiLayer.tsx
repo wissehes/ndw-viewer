@@ -14,7 +14,7 @@ import type {
   MsiFeatureCollection,
   MsiGantryProperties,
   MsiLane,
-} from "@/app/api/msi/route";
+} from "@/types/NDW/Msi";
 import MergeArrow from "./MergeArrow";
 
 // Color per active display state (dot color when zoomed out + legend).

@@ -2,7 +2,7 @@
 
 import { Layer, type LayerProps, Source, useMap } from "@vis.gl/react-maplibre";
 import { useEffect, useMemo } from "react";
-import type { DripFeatureCollection } from "@/app/api/drips/route";
+import type { DripFeatureCollection } from "@/types/NDW/Drips";
 
 // Active DRIP dots — visible when zoomed out, handed off to the panel images.
 const dotLayer: LayerProps = {

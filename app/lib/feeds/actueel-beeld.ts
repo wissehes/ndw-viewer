@@ -1,35 +1,15 @@
-import { createCachedFeed } from "@/app/lib/feedCache";
-import { asArray, fetchGzipXml, findFirst } from "@/app/lib/feeds";
+import type {
+  FeatureCollection,
+  SituationFeature,
+} from "@/types/NDW/ActueelBeeld";
+import { createCachedFeed } from "../feedCache";
+import { asArray, fetchGzipXml, findFirst } from "./index";
 
 // NDW "actueel beeld" (current situations) feed: gzipped DATEX II v3 XML,
 // ~4 MB uncompressed, refreshed roughly every minute. We fetch it server-side,
 // convert it to GeoJSON, and cache the result (see createCachedFeed).
 
 const FEED_URL = "https://opendata.ndw.nu/actueel_beeld.xml.gz";
-
-// Secondary HTTP-layer cache; the module cache in createCachedFeed is primary.
-export const revalidate = 60;
-
-export interface SituationProperties {
-  id: string;
-  type: string;
-  severity?: string;
-  cause?: string;
-  speedLimit?: number;
-  startTime?: string;
-  endTime?: string;
-}
-
-export interface SituationFeature {
-  type: "Feature";
-  geometry: { type: "Point"; coordinates: [number, number] };
-  properties: SituationProperties;
-}
-
-export interface FeatureCollection {
-  type: "FeatureCollection";
-  features: SituationFeature[];
-}
 
 // Returns [lon, lat] for a situation, or null if it has no usable coordinates.
 // biome-ignore lint/suspicious/noExplicitAny: parsed XML is dynamically shaped
@@ -99,14 +79,7 @@ const feed = createCachedFeed<FeatureCollection>(
   60_000,
 );
 
-export async function GET() {
-  try {
-    return Response.json(await feed.get());
-  } catch (err) {
-    console.error("actueel-beeld failed:", err);
-    return Response.json(
-      { error: "Failed to load NDW actueel_beeld feed" },
-      { status: 502 },
-    );
-  }
-}
+// Cached "actueel beeld" feed as a GeoJSON FeatureCollection. Shared by the
+// tRPC procedure (feeds.actueelBeeld); the heavy fetch+parse runs at most once
+// per TTL per process.
+export const getActueelBeeld = () => feed.get();

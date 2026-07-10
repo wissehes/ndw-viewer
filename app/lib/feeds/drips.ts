@@ -1,5 +1,10 @@
-import { createCachedFeed } from "@/app/lib/feedCache";
-import { asArray, fetchGzipXml, findFirst } from "@/app/lib/feeds";
+import type {
+  DripFeature,
+  DripFeatureCollection,
+  PanelLocation,
+} from "@/types/NDW/Drips";
+import { createCachedFeed } from "../feedCache";
+import { asArray, fetchGzipXml, findFirst } from "./index";
 
 // NDW DRIP feed (dynamic route information panels): gzipped DATEX II v3 VMS.
 // Two payloads — a static table (panel locations + descriptions) and a dynamic
@@ -7,38 +12,6 @@ import { asArray, fetchGzipXml, findFirst } from "@/app/lib/feeds";
 
 const FEED_URL =
   "https://opendata.ndw.nu/dynamische_route_informatie_paneel.xml.gz";
-
-export const revalidate = 60;
-
-export interface DripProperties {
-  id: string;
-  description: string;
-  vmsType: string;
-  status: string; // working | blank | notWorking | ...
-  active: boolean; // status === "working"
-  bearing: number;
-  updateTime?: string;
-  text?: string[];
-  image?: string; // data URI of the rendered panel, only for working panels
-}
-
-export interface DripFeature {
-  type: "Feature";
-  geometry: { type: "Point"; coordinates: [number, number] };
-  properties: DripProperties;
-}
-
-export interface DripFeatureCollection {
-  type: "FeatureCollection";
-  features: DripFeature[];
-}
-
-interface PanelLocation {
-  coordinates: [number, number];
-  description: string;
-  vmsType: string;
-  bearing: number;
-}
 
 // Index panel locations from the table payload, keyed by `${controllerId}#${vmsIndex}`.
 // biome-ignore lint/suspicious/noExplicitAny: parsed XML is dynamically shaped
@@ -134,14 +107,6 @@ const feed = createCachedFeed<DripFeatureCollection>(
   60_000,
 );
 
-export async function GET() {
-  try {
-    return Response.json(await feed.get());
-  } catch (err) {
-    console.error("drips failed:", err);
-    return Response.json(
-      { error: "Failed to load NDW DRIP feed" },
-      { status: 502 },
-    );
-  }
-}
+// Cached DRIP feed as a GeoJSON FeatureCollection. Shared by the tRPC procedure
+// (feeds.drips); the heavy fetch+parse runs at most once per TTL per process.
+export const getDrips = () => feed.get();

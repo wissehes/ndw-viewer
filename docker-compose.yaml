@@ -9,7 +9,7 @@ services:
       - traefik.http.routers.ndw-viewer.rule=Host(`ndw.wisse.dev`)
       - traefik.http.routers.ndw-viewer.entrypoints=websecure
     networks:
-      - ndw-viewer
+      - traefik
     environment:
       - MAPTILER_STYLE_URL=${MAPTILER_STYLE_URL}
     deploy:
@@ -23,6 +23,7 @@ services:
       restart_policy:
         condition: on-failure
 
+
     healthcheck:
       test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:3000/"]
       interval: 30s
@@ -30,5 +31,5 @@ services:
       retries: 3
 
 networks:
-  ndw-viewer:
-    driver: overlay
+  traefik:
+    external: true

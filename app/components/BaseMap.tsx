@@ -6,13 +6,12 @@ import MapGL, {
   NavigationControl,
 } from "@vis.gl/react-maplibre";
 import { type ReactNode, useState } from "react";
+import { useMapView } from "@/app/hooks/useMapView";
+import { roundCoord, roundZoom } from "@/app/lib/mapView";
 
 const STYLE_URL = process.env.NEXT_PUBLIC_MAPTILER_STYLE_URL;
 
-const DEFAULT_VIEW = { longitude: 5.29, latitude: 52.13, zoom: 7 };
-
 interface BaseMapProps {
-  initialViewState?: { longitude: number; latitude: number; zoom: number };
   interactiveLayerIds?: string[];
   onClick?: (event: MapLayerMouseEvent) => void;
   children?: ReactNode;
@@ -20,14 +19,23 @@ interface BaseMapProps {
 
 // Shared MapLibre/MapTiler map shell: style-URL guard, error surfacing, cursor
 // handling, and NavigationControl. Feature layers/popups are passed as children.
+// The view is synced to the URL via useMapView (shareable, persists on reload).
 export default function BaseMap({
-  initialViewState = DEFAULT_VIEW,
   interactiveLayerIds,
   onClick,
   children,
 }: BaseMapProps) {
+  const [view, setView] = useMapView();
   const [cursor, setCursor] = useState("auto");
   const [error, setError] = useState<string | null>(null);
+
+  // Read once at mount; MapGL stays uncontrolled, so writing back on move
+  // doesn't re-trigger a jump.
+  const [initialViewState] = useState(() => ({
+    longitude: view.lng,
+    latitude: view.lat,
+    zoom: view.zoom,
+  }));
 
   if (!STYLE_URL) {
     return (
@@ -49,6 +57,13 @@ export default function BaseMap({
         interactiveLayerIds={interactiveLayerIds}
         cursor={cursor}
         onClick={onClick}
+        onMoveEnd={(e) =>
+          setView({
+            lng: roundCoord(e.viewState.longitude),
+            lat: roundCoord(e.viewState.latitude),
+            zoom: roundZoom(e.viewState.zoom),
+          })
+        }
         onMouseEnter={() => setCursor("pointer")}
         onMouseLeave={() => setCursor("auto")}
         onError={(e) => setError(e.error?.message ?? "Unknown map error")}

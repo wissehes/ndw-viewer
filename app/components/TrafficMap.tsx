@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import {
   Layer,
   type LayerProps,
@@ -9,11 +10,8 @@ import {
 } from "@vis.gl/react-maplibre";
 import type { ExpressionSpecification } from "maplibre-gl";
 import { useCallback, useState } from "react";
-import type {
-  FeatureCollection,
-  SituationProperties,
-} from "@/app/api/actueel-beeld/route";
-import { useFeedQuery } from "@/app/hooks/useFeedQuery";
+import { useTRPC } from "@/trpc/client";
+import type { SituationProperties } from "@/types/NDW/ActueelBeeld";
 import BaseMap from "./BaseMap";
 
 const LAYER_ID = "situations-layer";
@@ -100,7 +98,8 @@ function SituationPopup({ props }: { props: SituationProperties }) {
 }
 
 export default function TrafficMap() {
-  const { data } = useFeedQuery<FeatureCollection>("/api/actueel-beeld");
+  const trpc = useTRPC();
+  const { data } = useQuery(trpc.feeds.actueelBeeld.queryOptions());
   const [popupInfo, setPopupInfo] = useState<PopupInfo | null>(null);
 
   const onClick = useCallback((event: MapLayerMouseEvent) => {

@@ -7,7 +7,7 @@ import { useMapView } from "@/app/hooks/useMapView";
 import { serializeMapView } from "@/app/lib/mapView";
 
 const LINKS = [
-  { href: "/", label: "Kaart" },
+  { href: "/", label: "Situatie" },
   { href: "/signs", label: "Borden" },
 ];
 

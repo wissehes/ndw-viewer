@@ -1,8 +1,11 @@
-import { gunzipSync } from "node:zlib";
-import { XMLParser } from "fast-xml-parser";
 import msiLocations from "@/app/data/msi-locations.json";
-import { createCachedFeed } from "@/app/lib/feedCache";
-import { asArray } from "@/app/lib/feeds";
+import type {
+  MsiFeature,
+  MsiFeatureCollection,
+  MsiLane,
+} from "@/types/NDW/Msi";
+import { createCachedFeed } from "../feedCache";
+import { asArray, fetchGzipXml } from "./index";
 
 // NDW MSI feed (matrix signals over motorway lanes): gzipped SOAP/custom XML.
 // Events carry no coordinates — only a sign uuid + road/km/lane and a display
@@ -14,8 +17,6 @@ import { asArray } from "@/app/lib/feeds";
 // gantry's lanes as one fixed-pixel row instead of overlapping per-lane markers.
 
 const FEED_URL = "https://opendata.ndw.nu/Matrixsignaalinformatie.xml.gz";
-
-export const revalidate = 60;
 
 // [lon, lat, bearing] per sign uuid.
 const locations = msiLocations as unknown as Record<
@@ -31,43 +32,6 @@ const DISPLAY_PRIORITY = [
   "lane_open",
   "restriction_end",
 ];
-
-export interface MsiLane {
-  lane: number;
-  display: string; // blank | speedlimit | lane_closed | lane_open | ...
-  speed: number | null;
-  flashing: boolean;
-  merge: "left" | "right" | null; // for lane_closed_ahead: which way to merge
-}
-
-export interface MsiGantryProperties {
-  id: string;
-  road: string;
-  carriageway: string;
-  km: number;
-  bearing: number; // travel direction, degrees clockwise from north (uniform per gantry)
-  active: boolean; // any lane not blank
-  primaryDisplay: string; // for dot color when zoomed out
-  lanes: MsiLane[]; // sorted by lane number
-  updateTime?: string;
-}
-
-export interface MsiFeature {
-  type: "Feature";
-  geometry: { type: "Point"; coordinates: [number, number] };
-  properties: MsiGantryProperties;
-}
-
-export interface MsiFeatureCollection {
-  type: "FeatureCollection";
-  features: MsiFeature[];
-}
-
-const parser = new XMLParser({
-  ignoreAttributes: false,
-  removeNSPrefix: true,
-  attributeNamePrefix: "@_",
-});
 
 // biome-ignore lint/suspicious/noExplicitAny: parsed XML is dynamically shaped
 function parseDisplay(display: any): {
@@ -199,23 +163,11 @@ function toGeoJSON(parsed: any): MsiFeatureCollection {
   return { type: "FeatureCollection", features };
 }
 
-async function fetchMsi(): Promise<MsiFeatureCollection> {
-  const res = await fetch(FEED_URL);
-  if (!res.ok) throw new Error(`MSI feed responded ${res.status}`);
-  const xml = gunzipSync(Buffer.from(await res.arrayBuffer())).toString("utf8");
-  return toGeoJSON(parser.parse(xml));
-}
+const feed = createCachedFeed<MsiFeatureCollection>(
+  async () => toGeoJSON(await fetchGzipXml(FEED_URL)),
+  60_000,
+);
 
-const feed = createCachedFeed<MsiFeatureCollection>(fetchMsi, 60_000);
-
-export async function GET() {
-  try {
-    return Response.json(await feed.get());
-  } catch (err) {
-    console.error("msi failed:", err);
-    return Response.json(
-      { error: "Failed to load NDW MSI feed" },
-      { status: 502 },
-    );
-  }
-}
+// Cached MSI feed as a GeoJSON FeatureCollection. Shared by the tRPC procedure
+// (feeds.msi); the heavy fetch+parse runs at most once per TTL per process.
+export const getMsi = () => feed.get();

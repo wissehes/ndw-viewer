@@ -88,8 +88,13 @@ function MsiPopupBody({ props }: { props: MsiGantryProperties }) {
 
 export default function SignsMap() {
   const trpc = useTRPC();
-  const { data: drips } = useQuery(trpc.feeds.drips.queryOptions());
-  const { data: msi } = useQuery(trpc.feeds.msi.queryOptions());
+  const { data: drips } = useQuery(
+    trpc.feeds.drips.queryOptions(undefined, { refetchInterval: 30_000 }),
+  );
+  const { data: msi } = useQuery(
+    trpc.feeds.msi.queryOptions(undefined, { refetchInterval: 30_000 }),
+  );
+
   const [showDrips, setShowDrips] = useState(true);
   const [showMsi, setShowMsi] = useState(true);
   const [popup, setPopup] = useState<PopupInfo | null>(null);

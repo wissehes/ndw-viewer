@@ -1,5 +1,5 @@
 # Build stage
-FROM node:24-alpine AS builder
+FROM docker.io/library/node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -10,14 +10,14 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN npm install -g pnpm
 RUN pnpm install --frozen-lockfile
 
-# Copy source code
+# Copy source code but ignore node_modules and .next directories
 COPY . .
 
 # Build the application
 RUN pnpm build
 
 # Production stage
-FROM node:24-alpine
+FROM docker.io/library/node:24-alpine
 
 WORKDIR /app
 

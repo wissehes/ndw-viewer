@@ -1,0 +1,8 @@
+# Next directory
+.next/
+
+# Node modules directory
+node_modules/
+
+# Environment variables
+.env*

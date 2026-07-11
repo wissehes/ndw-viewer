@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ndw-viewer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ndw-viewer
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: ndw-viewer
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: ndw-viewer
+          image: ghcr.io/wissehes/ndw-viewer:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: MAPTILER_STYLE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ndw-viewer-secrets
+                  key: MAPTILER_STYLE_URL

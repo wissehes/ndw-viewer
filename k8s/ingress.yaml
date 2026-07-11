@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ndw-viewer
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: ndw.k3s.wissehes.nl
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ndw-viewer
+                port:
+                  number: 80

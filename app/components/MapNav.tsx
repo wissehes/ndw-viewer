@@ -9,7 +9,7 @@ import { serializeMapView } from "@/app/lib/mapView";
 const LINKS = [
   { href: "/", label: "Situatie" },
   { href: "/signs", label: "Borden" },
-  { href: "/verkeer", label: "Snelheden" },
+  { href: "/verkeer", label: "Verkeer" },
 ];
 
 function MapNavLinks() {

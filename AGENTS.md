@@ -63,6 +63,32 @@ Use `refetchInterval` for the live-polling feeds.
 - **Browser-only map** — MapLibre must not SSR; load map components with `next/dynamic` + `{ ssr: false }` (see `SignsMapView.tsx`).
 - **Validation** — use **zod** for procedure `.input(...)` schemas.
 
+## Deployment
+
+Deploys to a **k3s** cluster via a GitHub Actions pipeline on every push to `main`. Container images are published to **GHCR** (`ghcr.io/wissehes/ndw-viewer`).
+
+### CI/CD (`.github/workflows/deploy.yaml`)
+
+Two jobs: **build** then **deploy** (`deploy` `needs: build`).
+
+- **build** — runs on the self-hosted `ndw-viewer-runners`; logs in to GHCR (`GITHUB_TOKEN`), then `docker/build-push-action` builds from the repo `Dockerfile` and pushes two tags: `:${{ github.sha }}` and `:latest` (with GHA build cache).
+- **deploy** — runs on `ubuntu-latest`; joins the cluster's network over **Tailscale** (OAuth secrets + `tag:github-actions`), sets up `kubectl`, writes the `KUBECONFIG` secret to disk, then:
+  - `kubectl apply -f k8s/` — reconcile the manifests.
+  - `kubectl set image deployment/ndw-viewer ndw-viewer=<IMAGE>:<sha>` — pin to the exact commit image (not `:latest`) so the rollout is deterministic.
+  - `kubectl rollout status … --timeout=120s` — block until healthy.
+
+Required GitHub secrets: `KUBECONFIG`, `TAILSCALE_OAUTH_CLIENT_ID`, `TAILSCALE_OAUTH_SECRET` (`GITHUB_TOKEN` is provided automatically).
+
+### k8s manifests (`k8s/`)
+
+Applied wholesale with `kubectl apply -f k8s/`; the running image is overridden by the pipeline's `set image` step, so bumping the image tag in the manifest is not how you deploy.
+
+- `deployment.yaml` — `Deployment` (1 replica, `RollingUpdate` with `maxUnavailable: 0`/`maxSurge: 1` for zero-downtime). Pulls from GHCR via the `ghcr-secret` `imagePullSecret`; container listens on port 3000. `MAPTILER_STYLE_URL` is injected from the `ndw-viewer-secrets` Secret (matches the runtime-config pattern above — see Other standards).
+- `service.yaml` — `Service` mapping port 80 → container `targetPort` 3000.
+- `ingress.yaml` — Traefik `Ingress` exposing `ndw.k3s.wissehes.nl` → the service on port 80.
+
+Cluster prerequisites (managed out-of-band, not in this repo): the `ghcr-secret` pull secret, the `ndw-viewer-secrets` Secret, and a Traefik ingress controller.
+
 ## Stack notes
 
 - **App Router** under `app/` — `layout.tsx` (root, sets Geist fonts, dark-mode-aware body, mounts `Providers`). Routes: `/` (`page.tsx`, traffic/actueel-beeld map) and `/signs` (`signs/page.tsx`, MSI + DRIP signs map).

@@ -3,7 +3,7 @@ import type {
   SituationFeature,
 } from "@/types/NDW/ActueelBeeld";
 import { createCachedFeed } from "../feedCache";
-import { asArray, fetchGzipXml, findFirst } from "./index";
+import { asArray, extractGeometry, fetchGzipXml, findFirst } from "./index";
 
 // NDW "actueel beeld" (current situations) feed: gzipped DATEX II v3 XML,
 // ~4 MB uncompressed, refreshed roughly every minute. We fetch it server-side,
@@ -11,39 +11,14 @@ import { asArray, fetchGzipXml, findFirst } from "./index";
 
 const FEED_URL = "https://opendata.ndw.nu/actueel_beeld.xml.gz";
 
-// Returns [lon, lat] for a situation, or null if it has no usable coordinates.
-// biome-ignore lint/suspicious/noExplicitAny: parsed XML is dynamically shaped
-function extractCoordinates(situation: any): [number, number] | null {
-  // Preferred: an explicit point (WGS84 lat/lon).
-  const point = findFirst(situation, "pointCoordinates");
-  if (point) {
-    const lat = Number(point.latitude);
-    const lon = Number(point.longitude);
-    if (Number.isFinite(lat) && Number.isFinite(lon)) return [lon, lat];
-  }
-  // Fallback: first vertex of a line geometry ("lat lon lat lon ...").
-  const posList = findFirst(situation, "posList");
-  if (typeof posList === "string") {
-    const nums = posList.trim().split(/\s+/).map(Number);
-    if (
-      nums.length >= 2 &&
-      Number.isFinite(nums[0]) &&
-      Number.isFinite(nums[1])
-    ) {
-      return [nums[1], nums[0]];
-    }
-  }
-  return null;
-}
-
 // biome-ignore lint/suspicious/noExplicitAny: parsed XML is dynamically shaped
 function toGeoJSON(parsed: any): FeatureCollection {
   const situations = asArray(parsed?.messageContainer?.payload?.situation);
   const features: SituationFeature[] = [];
 
   for (const situation of situations) {
-    const coordinates = extractCoordinates(situation);
-    if (!coordinates) continue;
+    const geometry = extractGeometry(situation);
+    if (!geometry) continue;
 
     const records = asArray(situation.situationRecord);
     // Use the first record for descriptive fields; strip the leading "sit:"
@@ -55,13 +30,26 @@ function toGeoJSON(parsed: any): FeatureCollection {
     const cause = findFirst(primary, "causeType") ?? undefined;
     const speedRaw = findFirst(primary, "temporarySpeedLimit");
     const speedLimit = speedRaw != null ? Number(speedRaw) : undefined;
+    const subtype =
+      findFirst(primary, "vehicleObstructionType") ??
+      findFirst(primary, "obstructionType") ??
+      findFirst(primary, "accidentType") ??
+      undefined;
+    const management =
+      findFirst(primary, "roadOrCarriagewayOrLaneManagementType") ?? undefined;
+    const safetyRelated = findFirst(primary, "safetyRelatedMessage");
 
     features.push({
       type: "Feature",
-      geometry: { type: "Point", coordinates },
+      geometry,
       properties: {
         id: String(situation["@_id"] ?? ""),
         type,
+        subtype: subtype != null ? String(subtype) : undefined,
+        management: management != null ? String(management) : undefined,
+        mobility: findFirst(primary, "mobilityType") ?? undefined,
+        safetyRelated:
+          safetyRelated === true || String(safetyRelated) === "true",
         severity: situation.overallSeverity,
         cause,
         speedLimit: Number.isFinite(speedLimit) ? speedLimit : undefined,

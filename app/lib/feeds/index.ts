@@ -36,3 +36,57 @@ export function findFirst(node: any, key: string): any {
   }
   return null;
 }
+
+// Parse a DATEX II gml posList ("lat lon lat lon …") into [lon, lat] pairs.
+function parsePosList(posList: string): [number, number][] {
+  const nums = posList.trim().split(/\s+/).map(Number);
+  const coords: [number, number][] = [];
+  for (let i = 0; i + 1 < nums.length; i += 2) {
+    const lat = nums[i];
+    const lon = nums[i + 1];
+    if (Number.isFinite(lat) && Number.isFinite(lon)) coords.push([lon, lat]);
+  }
+  return coords;
+}
+
+export type PointGeometry = { type: "Point"; coordinates: [number, number] };
+export type LineGeometry = {
+  type: "LineString";
+  coordinates: [number, number][];
+};
+
+// Extract the GeoJSON geometry of a DATEX II situation/record: a LineString
+// when it carries a gml line (roadworks stretches, speed zones, …), otherwise a
+// Point. Returns null when there are no usable coordinates. Used by the
+// SituationPublication feed (actueel-beeld).
+export function extractGeometry(
+  // biome-ignore lint/suspicious/noExplicitAny: parsed XML is dynamically shaped
+  node: any,
+): PointGeometry | LineGeometry | null {
+  // Prefer a full line geometry when present.
+  const line = findFirst(node, "gmlLineString");
+  const linePosList = line != null ? findFirst(line, "posList") : null;
+  if (typeof linePosList === "string") {
+    const coords = parsePosList(linePosList);
+    if (coords.length >= 2) return { type: "LineString", coordinates: coords };
+    if (coords.length === 1) return { type: "Point", coordinates: coords[0] };
+  }
+
+  // Otherwise an explicit WGS84 point.
+  const point = findFirst(node, "pointCoordinates");
+  if (point) {
+    const lat = Number(point.latitude);
+    const lon = Number(point.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+      return { type: "Point", coordinates: [lon, lat] };
+    }
+  }
+
+  // Last resort: the first vertex of any stray posList.
+  const posList = findFirst(node, "posList");
+  if (typeof posList === "string") {
+    const coords = parsePosList(posList);
+    if (coords.length) return { type: "Point", coordinates: coords[0] };
+  }
+  return null;
+}

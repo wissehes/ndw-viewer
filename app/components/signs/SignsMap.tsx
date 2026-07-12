@@ -151,10 +151,26 @@ export default function SignsMap() {
     [],
   );
 
+  const onSelectDrip = useCallback(
+    (props: DripProperties, coords: [number, number]) => {
+      setPopup({
+        longitude: coords[0],
+        latitude: coords[1],
+        kind: "drip",
+        props,
+      });
+    },
+    [],
+  );
+
   return (
     <>
       <BaseMap interactiveLayerIds={INTERACTIVE_LAYERS} onClick={onClick}>
-        <DripLayer data={drips ?? null} visible={showDrips} />
+        <DripLayer
+          data={drips ?? null}
+          visible={showDrips}
+          onSelect={onSelectDrip}
+        />
         <MsiLayer
           data={msi ?? null}
           visible={showMsi}

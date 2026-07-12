@@ -39,6 +39,56 @@ function buildLocationIndex(table: any): Map<string, PanelLocation> {
   return index;
 }
 
+// DRIP text lines embed pictograms as codes we can't render: numeric symbol
+// refs (`%s138`, `$138`) and font-mapped symbol chars in the Latin-1 symbol
+// block (e.g. `£` = U+00A3). Strip them — there's no public authoritative
+// mapping for the feed's specific numbers, so showing raw codes or guessed
+// icons would be misleading. Latin-1 letters (Dutch diacritics) are preserved.
+function stripSymbolCodes(text: string): string {
+  return text
+    .replace(/%s\d+|\$\d{3}/g, " ")
+    .replace(/[¡-¿×÷]/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+// A text line arrives as { textLine: { textLine: "the text" }, @_lineIndex }
+// (the DATEX element nests under itself, and removeNSPrefix collapses the
+// prefixes). Descend through the nested `textLine`/`#text` wrappers to the
+// string leaf.
+// biome-ignore lint/suspicious/noExplicitAny: parsed XML is dynamically shaped
+function extractLineText(lineNode: any): string {
+  let node = lineNode?.textLine ?? lineNode;
+  while (node && typeof node === "object") {
+    node = node.textLine ?? node["#text"];
+  }
+  return typeof node === "string" ? node.trim() : "";
+}
+
+// Collect all text lines (across every display area) of a vmsStatus message,
+// ordered by lineIndex. Line entries are the nodes carrying `@_lineIndex`; we
+// find them anywhere in the message rather than assuming a fixed nesting depth.
+type TextLine = { idx: number; text: string };
+// biome-ignore lint/suspicious/noExplicitAny: parsed XML is dynamically shaped
+function collectTextLines(node: any, acc: TextLine[] = []): TextLine[] {
+  if (!node || typeof node !== "object") return acc;
+  if (Array.isArray(node)) {
+    for (const item of node) collectTextLines(item, acc);
+    return acc;
+  }
+  if ("@_lineIndex" in node) {
+    acc.push({
+      idx: Number(node["@_lineIndex"]) || acc.length + 1,
+      text: extractLineText(node),
+    });
+    return acc; // a line node's children are the text wrappers — don't recurse
+  }
+  for (const key of Object.keys(node)) {
+    if (!key.startsWith("@_")) collectTextLines(node[key], acc);
+  }
+  return acc;
+}
+
 // biome-ignore lint/suspicious/noExplicitAny: parsed XML is dynamically shaped
 function toGeoJSON(parsed: any): DripFeatureCollection {
   const payloads = asArray(parsed?.messageContainer?.payload);
@@ -73,11 +123,10 @@ function toGeoJSON(parsed: any): DripFeatureCollection {
           const format = findFirst(inner, "imageFormat") ?? "png";
           image = `data:image/${format};base64,${imageData}`;
         }
-        const lines = asArray(findFirst(inner, "textLine"))
-          .map((line) =>
-            typeof line === "string" ? line : findFirst(line, "#text"),
-          )
-          .filter((line): line is string => Boolean(line));
+        const lines = collectTextLines(inner)
+          .sort((a, b) => a.idx - b.idx)
+          .map((line) => stripSymbolCodes(line.text))
+          .filter((line) => line.length > 0);
         if (lines.length) text = lines;
       }
 

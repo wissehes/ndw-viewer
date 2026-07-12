@@ -3,6 +3,9 @@ export interface SituationProperties {
   type: string;
   subtype?: string; // obstruction/accident sub-classification
   management?: string; // roadOrCarriagewayOrLaneManagementType (closures, etc.)
+  lanesOpen?: number; // numberOfOperationalLanes (lanes still drivable)
+  lanesRestricted?: number; // numberOfLanesRestricted (lanes closed off)
+  lanesTotal?: number; // originalNumberOfLanes (carriageway's normal lane count)
   mobility?: string; // stationary | mobile (obstructions)
   safetyRelated?: boolean; // record flagged as safety-related (SRTI subset)
   severity?: string;

@@ -23,6 +23,14 @@ export function asArray<T>(value: T | T[] | undefined | null): T[] {
   return Array.isArray(value) ? value : [value];
 }
 
+// Coerce a parsed-XML scalar to a finite number, or undefined. Shared by the
+// DATEX II feeds that read lane counts / speed limits.
+export function toNumber(value: unknown): number | undefined {
+  if (value == null) return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 // Recursively find the first value for `key` anywhere in a nested object.
 // DATEX II nests fields (coordinates, causes, …) differently per record type,
 // so a structural search is more robust than hard-coding each path.

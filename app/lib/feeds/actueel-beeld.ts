@@ -3,7 +3,13 @@ import type {
   SituationFeature,
 } from "@/types/NDW/ActueelBeeld";
 import { createCachedFeed } from "../feedCache";
-import { asArray, extractGeometry, fetchGzipXml, findFirst } from "./index";
+import {
+  asArray,
+  extractGeometry,
+  fetchGzipXml,
+  findFirst,
+  toNumber,
+} from "./index";
 
 // NDW "actueel beeld" (current situations) feed: gzipped DATEX II v3 XML,
 // ~4 MB uncompressed, refreshed roughly every minute. We fetch it server-side,
@@ -37,6 +43,11 @@ function toGeoJSON(parsed: any): FeatureCollection {
       undefined;
     const management =
       findFirst(primary, "roadOrCarriagewayOrLaneManagementType") ?? undefined;
+    const lanesOpen = toNumber(findFirst(primary, "numberOfOperationalLanes"));
+    const lanesRestricted = toNumber(
+      findFirst(primary, "numberOfLanesRestricted"),
+    );
+    const lanesTotal = toNumber(findFirst(primary, "originalNumberOfLanes"));
     const safetyRelated = findFirst(primary, "safetyRelatedMessage");
 
     features.push({
@@ -47,6 +58,9 @@ function toGeoJSON(parsed: any): FeatureCollection {
         type,
         subtype: subtype != null ? String(subtype) : undefined,
         management: management != null ? String(management) : undefined,
+        lanesOpen,
+        lanesRestricted,
+        lanesTotal,
         mobility: findFirst(primary, "mobilityType") ?? undefined,
         safetyRelated:
           safetyRelated === true || String(safetyRelated) === "true",

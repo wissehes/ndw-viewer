@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { type MapLayerMouseEvent, Popup } from "@vis.gl/react-maplibre";
 import { useCallback, useState } from "react";
+import { formatDateTime } from "@/app/lib/format";
 import { useTRPC } from "@/trpc/client";
 import type { DripProperties } from "@/types/NDW/Drips";
 import type { MsiGantryProperties } from "@/types/NDW/Msi";
@@ -47,7 +48,9 @@ function DripPopupBody({ props }: { props: DripProperties }) {
         <div key={line}>{line}</div>
       ))}
       {props.updateTime && (
-        <div className="mt-1 text-[11px] text-zinc-400">{props.updateTime}</div>
+        <div className="mt-1 text-[11px] text-zinc-400">
+          {formatDateTime(props.updateTime)}
+        </div>
       )}
     </div>
   );
@@ -80,7 +83,9 @@ function MsiPopupBody({ props }: { props: MsiGantryProperties }) {
         ))}
       </ul>
       {props.updateTime && (
-        <div className="mt-1 text-[11px] text-zinc-400">{props.updateTime}</div>
+        <div className="mt-1 text-[11px] text-zinc-400">
+          {formatDateTime(props.updateTime)}
+        </div>
       )}
     </div>
   );

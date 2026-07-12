@@ -10,6 +10,7 @@ import {
 } from "@vis.gl/react-maplibre";
 import type { ExpressionSpecification } from "maplibre-gl";
 import { useCallback, useState } from "react";
+import { formatDateTime } from "@/app/lib/format";
 import { useTRPC } from "@/trpc/client";
 import type { TrafficSpeedProperties } from "@/types/NDW/TrafficSpeed";
 import BaseMap from "../BaseMap";
@@ -95,7 +96,7 @@ function MeasurementPopup({ props }: { props: TrafficSpeedProperties }) {
     ["Intensity", props.flow != null ? `${props.flow} veh/h` : undefined],
     ["Lanes", props.lanes != null ? String(props.lanes) : undefined],
     ["Direction", props.side],
-    ["Updated", props.updateTime],
+    ["Updated", formatDateTime(props.updateTime)],
   ];
   return (
     <div className="font-sans text-xs leading-relaxed text-zinc-800">

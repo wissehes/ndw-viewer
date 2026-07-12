@@ -10,6 +10,7 @@ import {
 } from "@vis.gl/react-maplibre";
 import type { ExpressionSpecification } from "maplibre-gl";
 import { useCallback, useState } from "react";
+import { formatDateTime } from "@/app/lib/format";
 import { useTRPC } from "@/trpc/client";
 import type { SituationProperties } from "@/types/NDW/ActueelBeeld";
 import BaseMap from "./BaseMap";
@@ -191,8 +192,8 @@ function SituationPopup({ props }: { props: SituationProperties }) {
       "Speed limit",
       props.speedLimit != null ? `${props.speedLimit} km/h` : undefined,
     ],
-    ["From", props.startTime],
-    ["Until", props.endTime],
+    ["From", formatDateTime(props.startTime)],
+    ["Until", formatDateTime(props.endTime)],
   ];
 
   return (

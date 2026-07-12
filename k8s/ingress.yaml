@@ -5,7 +5,19 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
+  # ndw.k3s.wissehes.nl
     - host: ndw.k3s.wissehes.nl
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ndw-viewer
+                port:
+                  number: 80
+  # ndw.wisse.dev
+    - host: ndw.wisse.dev
       http:
         paths:
           - path: /

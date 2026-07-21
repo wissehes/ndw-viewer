@@ -1,7 +1,12 @@
-name: Build & Deploy
+name: Build & Verify
 
+# Only main-branch commits and PRs targeting main run here. Only main-branch
+# pushes publish a `main-<run>-<sha>` tag, which is the only tag Flux's
+# ImagePolicy matches — PR builds cannot deploy even if merged in error.
 on:
     push:
+        branches: [main]
+    pull_request:
         branches: [main]
 
 env:
@@ -24,38 +29,93 @@ jobs:
 
             - uses: docker/setup-buildx-action@v3
 
-            - uses: docker/build-push-action@v6
+            - name: Build & push
+              uses: docker/build-push-action@v6
               with:
                   context: .
                   push: true
+                  # Three tags:
+                  #   :<sha>                        always — pinned artefact
+                  #   :latest / :pr-N               convenience
+                  #   :main-<run>-<sha>             ONLY on push to main — Flux tracks this
                   tags: |
                       ${{ env.IMAGE }}:${{ github.sha }}
-                      ${{ env.IMAGE }}:latest
+                      ${{ github.event_name == 'pull_request' && format('{0}:pr-{1}', env.IMAGE, github.event.pull_request.number) || format('{0}:latest', env.IMAGE) }}
+                      ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && format('{0}:main-{1}-{2}', env.IMAGE, github.run_number, github.sha) || '' }}
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
 
-    deploy:
+    verify-deploy:
+        name: Verify deploy
         needs: build
-        runs-on: ubuntu-latest
+        runs-on: ndw-viewer-runners
+        # Guard #1: only main pushes attempt to observe a deploy. PR runs stop
+        # after `build`. Combined with the tag-pattern filter in Flux's
+        # ImagePolicy, PRs are structurally incapable of reaching production.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        permissions:
+            contents: read
+            deployments: write  # for the GitHub Deployment status API
+        env:
+            EXPECTED_TAG: main-${{ github.run_number }}-${{ github.sha }}
+            NAMESPACE: ndw
+            DEPLOYMENT: ndw-viewer
         steps:
-            - uses: actions/checkout@v4
-
-            - name: Connect to Tailscale
-              uses: tailscale/github-action@v3
+            # Create a GitHub Deployment so the repo Environments tab shows
+            # a live rollout indicator. `initial-status: in_progress` skips
+            # the transient `queued` state.
+            - name: Create GitHub deployment
+              id: deployment
+              uses: chrnorm/deployment-action@v2
               with:
-                  oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
-                  oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
-                  tags: tag:github-actions
+                  token: ${{ github.token }}
+                  environment: production
+                  environment-url: https://ndw.wisse.dev
+                  ref: ${{ github.sha }}
+                  initial-status: in_progress
+                  description: "Waiting for Flux to roll out ${{ env.EXPECTED_TAG }}"
 
-            - name: Set up kubectl
-              uses: azure/setup-kubectl@v4
+            - uses: azure/setup-kubectl@v4
 
-            - name: Deploy
-              env:
-                  KUBECONFIG_CONTENT: ${{ secrets.KUBECONFIG }}
+            # Runner pods mount the ndw-viewer-deployer SA (read-only on ns/ndw)
+            # — kubectl picks it up from /var/run/secrets automatically.
+            - name: Wait for Flux to bump the Deployment image
               run: |
-                  echo "$KUBECONFIG_CONTENT" > kubeconfig.yaml
-                  export KUBECONFIG=kubeconfig.yaml
-                  kubectl apply -f k8s/
-                  kubectl set image deployment/ndw-viewer ndw-viewer=${{ env.IMAGE }}:${{ github.sha }}
-                  kubectl rollout status deployment/ndw-viewer --timeout=120s
+                  echo "Expecting Deployment $NAMESPACE/$DEPLOYMENT to run tag :$EXPECTED_TAG"
+                  for i in $(seq 1 60); do
+                    CURRENT=$(kubectl -n "$NAMESPACE" get deployment "$DEPLOYMENT" \
+                      -o jsonpath="{.spec.template.spec.containers[?(@.name=='$DEPLOYMENT')].image}" \
+                      2>/dev/null || echo "not-found")
+                    echo "  [$(date -u +%H:%M:%S)] attempt $i/60: $CURRENT"
+                    if [[ "$CURRENT" == *":$EXPECTED_TAG" ]]; then
+                      echo "Flux picked up this build."
+                      exit 0
+                    fi
+                    sleep 10
+                  done
+                  echo "::error::Timed out after 10 min waiting for Flux to update the Deployment"
+                  exit 1
+
+            - name: Wait for rollout to complete
+              run: kubectl -n "$NAMESPACE" rollout status "deployment/$DEPLOYMENT" --timeout=5m
+
+            - name: Show final pod status
+              if: always()
+              run: kubectl -n "$NAMESPACE" get pods -l app=ndw-viewer -o wide
+
+            - name: Mark deployment successful
+              if: success()
+              uses: chrnorm/deployment-status@v2
+              with:
+                  token: ${{ github.token }}
+                  deployment-id: ${{ steps.deployment.outputs.deployment_id }}
+                  environment-url: https://ndw.wisse.dev
+                  state: success
+
+            - name: Mark deployment failed
+              if: failure() || cancelled()
+              uses: chrnorm/deployment-status@v2
+              with:
+                  token: ${{ github.token }}
+                  deployment-id: ${{ steps.deployment.outputs.deployment_id }}
+                  state: failure
